@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRRT (CVVH) 臨床處方劑量與過濾分數 (FF) 計算器</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- MathJax for Medical/Math Formulas -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+    }
+    input[type=range] {
+      accent-color: #0d9488;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { background-color: #ffffff; }
+      .print-shadow-none { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- 頂部導覽列 / 標題 -->
+  <header class="bg-gradient-to-r from-teal-800 to-cyan-900 text-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-teal-700/60 rounded-lg shadow-inner">
+          <i class="fa-solid fa-heart-pulse text-2xl text-teal-300"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+            CRRT (CVVH) 劑量與過濾分數計算器
+            <span class="text-xs bg-teal-500/30 text-teal-200 border border-teal-400/40 px-2 py-0.5 rounded-full font-normal">KDIGO 指引臨床版</span>
+          </h1>
+          <p class="text-xs text-teal-200/80">連續性靜脈-靜脈血液濾過 (CVVH) 處方劑量、稀釋效應校正與凝血風險 (FF) 評估</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 no-print">
+        <button onclick="window.print()" class="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-lg backdrop-blur-sm transition flex items-center gap-1.5 border border-white/20">
+          <i class="fa-solid fa-print"></i> 列印 / 匯出報告
+        </button>
+        <button onclick="resetDefaults()" class="px-3 py-1.5 bg-teal-700 hover:bg-teal-600 text-teal-100 text-xs font-medium rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate-left"></i> 重設數值
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容容器 -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KDIGO 臨床指引提醒 Banner -->
+    <div class="bg-cyan-50 border-l-4 border-teal-600 p-4 rounded-r-xl shadow-sm text-sm text-cyan-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      <div class="flex items-start gap-3">
+        <i class="fa-solid fa-circle-info text-teal-600 text-lg mt-0.5"></i>
+        <div>
+          <span class="font-bold text-teal-900">KDIGO 2012 臨床實踐指引建議：</span>
+          CRRT 的實際傳遞劑量 (Delivered dose) 建議為 <span class="font-bold text-teal-800">20–25 mL/kg/h</span>。
+          考慮到治療停機（警報、換袋、濾器凝血、檢查等損失 10–15% 時間），處方劑量 (Prescribed dose) 通常應設定在 <span class="font-bold text-teal-800">25–30 mL/kg/h</span>。
+          採用前稀釋 (Pre-dilution) 時，需依血漿稀釋比率校正實際清除效率。
+        </div>
+      </div>
+      <div class="shrink-0 flex items-center gap-2">
+        <span class="text-xs bg-teal-100 text-teal-800 px-2.5 py-1 rounded-md font-semibold border border-teal-200">目標處方: 25~30 mL/kg/h</span>
+      </div>
+    </div>
+
+    <!-- 雙欄版面：左側輸入與控制、右側即時成果與儀表板 -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- 左側：輸入控制區 (5 欄寬) -->
+      <section class="lg:col-span-5 space-y-5">
+        
+        <!-- 卡片 1: 病患基本與血液參數 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-user-injured text-teal-600"></i> 病患與血液參數
+            </h2>
+            <span class="text-xs text-slate-500 font-medium">必填基礎數值</span>
+          </div>
+
+          <div class="space-y-4">
+            <!-- 體重 -->
+            <div>
+              <div class="flex justify-between items-center text-sm font-medium text-slate-700 mb-1">
+                <label for="bw">病患體重 (Weight)</label>
+                <span class="font-bold text-teal-700 text-base" id="bwVal">65 <span class="text-xs font-normal text-slate-500">kg</span></span>
+              </div>
+              <input type="range" id="bw" min="30" max="150" step="1" value="65" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              <div class="flex justify-between text-xs text-slate-400 mt-1">
+                <span>30 kg</span>
+                <span>標準成人 (60-70)</span>
+                <span>150 kg</span>
+              </div>
+            </div>
+
+            <!-- 血流量 Qb -->
+            <div>
+              <div class="flex justify-between items-center text-sm font-medium text-slate-700 mb-1">
+                <label for="qb">體外血流速 ($Q_b$)</label>
+                <span class="font-bold text-teal-700 text-base" id="qbVal">150 <span class="text-xs font-normal text-slate-500">mL/min</span></span>
+              </div>
+              <input type="range" id="qb" min="80" max="300" step="10" value="150" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              <div class="flex justify-between text-xs text-slate-400 mt-1">
+                <span>80 mL/min</span>
+                <span>常規 (150-200)</span>
+                <span>300 mL/min</span>
+              </div>
+            </div>
+
+            <!-- 血球容積比 Hct -->
+            <div>
+              <div class="flex justify-between items-center text-sm font-medium text-slate-700 mb-1">
+                <label for="hct">血球容積比 (Hematocrit, Hct)</label>
+                <span class="font-bold text-teal-700 text-base" id="hctVal">30 <span class="text-xs font-normal text-slate-500">%</span></span>
+              </div>
+              <input type="range" id="hct" min="15" max="55" step="1" value="30" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              <p class="text-xs text-slate-500 mt-1">
+                計算血漿流速 $Q_p = Q_b \times (1 - \text{Hct}) \times 60$ 必備參數
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 2: 計算運作模式與脫水設定 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-sliders text-teal-600"></i> CVVH 處方模式
+            </h2>
+            <div class="flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium">
+              <button id="modeTargetBtn" onclick="switchCalcMode('target')" class="px-2.5 py-1 rounded-md bg-white text-teal-800 shadow-sm transition font-semibold">目標導向 (推算補液)</button>
+              <button id="modeDirectBtn" onclick="switchCalcMode('direct')" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition">自訂流速 (驗算劑量)</button>
+            </div>
+          </div>
+
+          <!-- 脫水量設定 (Net UF) -->
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between items-center text-sm font-medium text-slate-700 mb-1">
+                <label for="netUf" class="flex items-center gap-1">
+                  每小時目標淨脫水量 (Net UF / Fluid Removal)
+                  <i class="fa-regular fa-circle-question text-slate-400 text-xs" title="機器設定為病患移除體液的每小時負平衡量"></i>
+                </label>
+                <span class="font-bold text-sky-700 text-base" id="netUfVal">100 <span class="text-xs font-normal text-slate-500">mL/h</span></span>
+              </div>
+              <input type="range" id="netUf" min="0" max="600" step="10" value="100" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              <div class="flex justify-between text-xs text-slate-400 mt-1">
+                <span>0 (等平衡)</span>
+                <span>常規脫水 (50-200)</span>
+                <span>600 mL/h</span>
+              </div>
+            </div>
+
+            <!-- 模式 A: 目標處方導向 -->
+            <div id="targetModeControls" class="p-3.5 bg-teal-50/70 border border-teal-100 rounded-xl space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-teal-900">1. 設定基礎置換液劑量 (Base Replacement Dose)</span>
+                <span class="text-sm font-bold text-teal-800" id="targetDoseLabel">25.0 mL/kg/h</span>
+              </div>
+              
+              <!-- 快捷按鈕 -->
+              <div class="grid grid-cols-4 gap-1.5 text-xs">
+                <button type="button" onclick="setPresetDose(20)" id="btnPreset20" class="py-1 px-2 bg-white border border-teal-200 rounded text-teal-800 hover:bg-teal-100 text-center font-medium">20</button>
+                <button type="button" onclick="setPresetDose(25)" id="btnPreset25" class="py-1 px-2 bg-teal-600 border border-teal-600 text-white rounded shadow-xs text-center font-bold">25 (建議)</button>
+                <button type="button" onclick="setPresetDose(30)" id="btnPreset30" class="py-1 px-2 bg-white border border-teal-200 rounded text-teal-800 hover:bg-teal-100 text-center font-medium">30 (建議)</button>
+                <button type="button" onclick="setPresetDose(35)" id="btnPreset35" class="py-1 px-2 bg-white border border-teal-200 rounded text-teal-800 hover:bg-teal-100 text-center font-medium">35</button>
+              </div>
+
+              <input type="range" id="targetDose" min="15" max="45" step="0.5" value="25" class="w-full h-2 bg-teal-200 rounded-lg cursor-pointer mt-1">
+              
+              <div class="text-xs text-slate-600">
+                <label class="block font-medium mb-1">2. 前稀釋比例 (Pre-dilution Ratio %)</label>
+                <div class="flex items-center gap-3">
+                  <input type="range" id="preDilutionRatio" min="0" max="100" step="5" value="50" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+                  <span class="font-bold text-slate-700 w-12 text-right" id="preRatioVal">50%</span>
+                </div>
+                <div class="flex justify-between text-[11px] text-slate-400 mt-0.5">
+                  <span>0% (全後稀釋)</span>
+                  <span>50:50 混和</span>
+                  <span>100% (全前稀釋)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 模式 B: 自訂流速導向 (隱藏/展開) -->
+            <div id="directModeControls" class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 hidden">
+              <div>
+                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                  <label for="directPre">前置換液流速 ($Q_{\text{pre}}$)</label>
+                  <span class="font-bold text-teal-800" id="directPreVal">800 mL/h</span>
+                </div>
+                <input type="range" id="directPre" min="0" max="3000" step="50" value="800" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              </div>
+              <div>
+                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                  <label for="directPost">後置換液流速 ($Q_{\text{post}}$)</label>
+                  <span class="font-bold text-teal-800" id="directPostVal">800 mL/h</span>
+                </div>
+                <input type="range" id="directPost" min="0" max="3000" step="50" value="800" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer">
+              </div>
+            </div>
+
+            <!-- 預估每日常規停機時間補償 (Downtime compensation) -->
+            <div class="pt-2 border-t border-slate-100">
+              <div class="flex justify-between text-xs text-slate-600 mb-1">
+                <span class="flex items-center gap-1 font-medium">
+                  <i class="fa-regular fa-clock text-slate-400"></i> 預期停機時間補償 (每日)
+                </span>
+                <span class="font-semibold text-slate-800" id="downtimeHoursVal">2.5 小時/天 (約 10.4%)</span>
+              </div>
+              <input type="range" id="downtimeHours" min="0" max="6" step="0.5" value="2.5" class="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer">
+              <p class="text-[11px] text-slate-500 mt-1">KDIGO 研究顯示實際運轉時間約為 85-90%。若停機 2.5 小時，實際傳遞量僅約處方值的 89.6%。</p>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- 右側：計算結果面板、FF 安全儀表、臨床指引建議 (7 欄寬) -->
+      <section class="lg:col-span-7 space-y-5">
+        
+        <!-- 主要計算結果卡片 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-chart-pie text-teal-600"></i> CVVH 處方與劑量分析結果
+              </h2>
+              <p class="text-xs text-slate-500">依據 KDIGO 體重標準與稀釋係數修正</p>
+            </div>
+            <span id="doseBadge" class="text-xs px-2.5 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              劑量符合 KDIGO 標準 (25–30)
+            </span>
+          </div>
+
+          <!-- 關鍵數字卡片群組 -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+            
+            <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="text-xs text-slate-500 font-medium mb-1">總廢液排量 (Effluent Rate)</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-slate-900" id="resEffluentRate">-- <span class="text-xs font-normal text-slate-500">mL/h</span></div>
+              <div class="text-[11px] text-slate-500 mt-1">
+                $Q_{\text{eff}} = Q_{\text{pre}} + Q_{\text{post}} + \text{Net UF}$
+              </div>
+            </div>
+
+            <div class="p-3.5 bg-teal-50/60 rounded-xl border border-teal-200">
+              <div class="text-xs text-teal-800 font-medium mb-1">處方廢液劑量 (Prescribed)</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-teal-900" id="resPrescribedDose">-- <span class="text-xs font-normal text-teal-700">mL/kg/h</span></div>
+              <div class="text-[11px] text-teal-700 mt-1 font-medium" id="resPrescribedSub">
+                目標設定基準
+              </div>
+            </div>
+
+            <div class="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 col-span-2 sm:col-span-1">
+              <div class="text-xs text-emerald-800 font-medium mb-1">實際傳遞劑量 (Delivered)</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-emerald-950" id="resEffectiveDose">-- <span class="text-xs font-normal text-emerald-700">mL/kg/h</span></div>
+              <div class="text-[11px] text-emerald-700 mt-1">
+                經前稀釋校正 ($DF \times \text{Dose}$)
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 血液動力學與稀釋細部參數表 -->
+          <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2 text-xs">
+            <div class="flex justify-between items-center py-1 border-b border-slate-200/60">
+              <span class="text-slate-600">血漿流量 Plasma Flow ($Q_p$):</span>
+              <span class="font-bold text-slate-800" id="resQp">-- mL/h (-- mL/min)</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-200/60">
+              <span class="text-slate-600">前置換液流速 ($Q_{\text{pre}}$):</span>
+              <span class="font-bold text-teal-800" id="resQpre">-- mL/h</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-200/60">
+              <span class="text-slate-600">後置換液流速 ($Q_{\text{post}}$):</span>
+              <span class="font-bold text-teal-800" id="resQpost">-- mL/h</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-200/60">
+              <span class="text-slate-600">前稀釋溶質降低係數 (Dilution Factor, $DF$):</span>
+              <span class="font-bold text-indigo-700" id="resDF">--</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+              <span class="text-slate-600">考量停機後淨傳遞劑量 (Net Downtime Delivered):</span>
+              <span class="font-bold text-slate-900" id="resDowntimeDose">-- mL/kg/h</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 過濾分數 Filtration Fraction (FF) 專屬評估卡片 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-gauge-high text-teal-600"></i> 過濾分數 (Filtration Fraction, FF)
+              </h2>
+              <p class="text-xs text-slate-500 mt-1">
+                評估濾器血液濃縮程度。公式: <code class="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-mono">FF = (Q_net_uf + Q_post) / Q_plasma</code>
+              </p>
+            </div>
+            <span id="ffStatusBadge" class="text-xs px-3 py-1 rounded-full font-bold bg-green-100 text-green-800 border border-green-300">
+              正常安全 (&lt; 20%)
+            </span>
+          </div>
+
+          <!-- 視覺化百分比進度長條 -->
+          <div class="space-y-2 mb-4">
+            <div class="flex justify-between items-baseline">
+              <span class="text-xs font-semibold text-slate-600">過濾分數 (FF) 計算結果：</span>
+              <span class="text-2xl font-black text-slate-900" id="resFF">-- <span class="text-sm font-normal text-slate-500">%</span></span>
+            </div>
+            <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden flex shadow-inner">
+              <div id="ffBarSafe" class="bg-emerald-500 h-full transition-all duration-300" style="width: 20%"></div>
+              <div id="ffBarWarn" class="bg-amber-400 h-full transition-all duration-300" style="width: 5%"></div>
+              <div id="ffBarDanger" class="bg-rose-500 h-full transition-all duration-300" style="width: 75%"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400">
+              <span class="text-emerald-700 font-medium">&lt; 20% (安全常態)</span>
+              <span class="text-amber-700 font-medium">20% - 25% (警戒邊緣)</span>
+              <span class="text-rose-700 font-medium">&gt; 25% (高凝血風險)</span>
+            </div>
+          </div>
+
+          <!-- 臨床風險提示與處置建議 -->
+          <div id="ffAdviceBox" class="p-3.5 rounded-xl text-xs transition border flex items-start gap-3 bg-emerald-50 border-emerald-200 text-emerald-900">
+            <i class="fa-solid fa-shield-halved text-base mt-0.5 text-emerald-600 shrink-0"></i>
+            <div>
+              <div class="font-bold text-sm mb-0.5" id="ffAdviceTitle">濾器血液濃縮狀況良好</div>
+              <p class="leading-relaxed" id="ffAdviceText">當前過濾分數控制在 20% 以下，濾器內血液濃縮風險低，有助於延長濾器壽命並降低管路凝血機會。</p>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+    </div>
+
+    <!-- 底部：完整數學公式推導、KDIGO 參考資料 (Reference Section) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+      <div class="border-b border-slate-200 pb-3">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-square-root-variable text-teal-600"></i> 完整計算公式、臨床數學邏輯與文獻參考 (Reference)
+        </h3>
+        <p class="text-xs text-slate-500 mt-1">本工具依據國際腎臟病改善全球結果組織 (KDIGO) 及急性透析品質倡議 (ADQI) 標準公式建置</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-700">
+        
+        <!-- 公式 1: CVVH 處方與劑量公式 -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <h4 class="font-bold text-slate-900 text-teal-900 border-b border-slate-200 pb-1.5 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-xs flex items-center justify-center font-bold">1</span>
+            CVVH 處方劑量與稀釋效應 (Dilution Factor)
+          </h4>
+          
+          <div class="space-y-2 text-xs leading-relaxed">
+            <p><strong>總排液流速 (Effluent Rate, $Q_{\text{eff}}$)：</strong></p>
+            <div class="p-2 bg-white rounded border border-slate-200 font-mono text-center">
+              $$Q_{\text{eff}} = Q_{\text{pre}} + Q_{\text{post}} + \text{Net UF} \quad (\text{mL/h})$$
+            </div>
+            
+            <p><strong>名義處方劑量 (Prescribed Dose)：</strong></p>
+            <div class="p-2 bg-white rounded border border-slate-200 font-mono text-center">
+              $$\text{Dose}_{\text{prescribed}} = \frac{Q_{\text{eff}}}{\text{Body Weight (kg)}} \quad (\text{mL/kg/h})$$
+            </div>
+
+            <p><strong>前稀釋校正係數 (Dilution Factor, $DF$)：</strong></p>
+            <p class="text-slate-600 text-[11px]">
+              在前稀釋模式下，置換液於濾器前方進入，使得進入濾器的血液中溶質（如尿素氮、肌酸酐）濃度被稀釋，實際溶質清除率須乘以稀釋係數：
+            </p>
+            <div class="p-2 bg-white rounded border border-slate-200 font-mono text-center">
+              $$DF = \frac{Q_p}{Q_p + Q_{\text{pre}}} = \frac{Q_b \times (1 - \text{Hct}) \times 60}{[Q_b \times (1 - \text{Hct}) \times 60] + Q_{\text{pre}}}$$
+            </div>
+            
+            <p><strong>實際傳遞劑量 (Delivered Dose)：</strong></p>
+            <div class="p-2 bg-white rounded border border-slate-200 font-mono text-center">
+              $$\text{Dose}_{\text{delivered}} = \frac{(Q_{\text{pre}} \times DF) + Q_{\text{post}} + \text{Net UF}}{\text{Body Weight (kg)}}$$
+            </div>
+          </div>
+        </div>
+
+        <!-- 公式 2: 過濾分數 FF 公式 -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <h4 class="font-bold text-slate-900 text-teal-900 border-b border-slate-200 pb-1.5 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-xs flex items-center justify-center font-bold">2</span>
+            過濾分數 (Filtration Fraction, FF)
+          </h4>
+
+          <div class="space-y-2 text-xs leading-relaxed">
+            <p><strong>過濾分數 (Filtration Fraction, FF) 定義：</strong></p>
+            <p class="text-slate-600 text-[11px]">
+              依據臨床實務要求，採用反映實際血漿水分抽吸比例的公式。排除前稀釋對血漿與脫水量的雙向稀釋干擾，精準評估濾器內的血液濃縮程度：
+            </p>
+            
+            <div class="p-2 bg-white rounded border border-slate-200 font-mono text-center">
+              $$FF (\%) = \frac{Q_{\text{net\_uf}} + Q_{\text{post}}}{Q_{\text{plasma}}} \times 100\%$$
+            </div>
+
+            <p class="text-slate-600 text-[11px]">其中各項定義為：</p>
+            <ul class="list-disc pl-5 space-y-1 text-slate-600 text-[11px]">
+              <li><strong>淨脫水量 ($Q_{\text{net\_uf}}$)：</strong> 每小時從病患移除之體液量</li>
+              <li><strong>後置換液 ($Q_{\text{post}}$)：</strong> 在濾器後方補充的置換液（等同在濾器內被抽出的血漿水分）</li>
+              <li><strong>血漿流速 ($Q_{\text{plasma}}$)：</strong> $Q_p = Q_b \times (1 - \text{Hct}) \times 60 \quad (\text{mL/h})$</li>
+            </ul>
+
+            <div class="p-2.5 bg-amber-50/80 border border-amber-200 rounded text-amber-900 text-[11px] mt-2">
+              <span class="font-bold">臨床指引臨界值：</span>
+              <ul class="list-disc pl-4 mt-1 space-y-0.5">
+                <li><strong>&lt; 20%</strong>：理想範圍，凝血風險低。</li>
+                <li><strong>20% – 25%</strong>：邊緣臨界，需密集監測跨膜壓 (TMP) 與濾器壓差。</li>
+                <li><strong>&gt; 25%</strong>：高度凝血風險，建議調高血流速 ($Q_b$)、增加前稀釋比例或調降脫水。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 文獻來源與臨床免責 -->
+      <div class="pt-4 border-t border-slate-200 text-xs text-slate-500 space-y-2">
+        <div class="font-bold text-slate-700">臨床參考文獻 (Citations & Guidelines)：</div>
+        <ol class="list-decimal pl-5 space-y-1 text-slate-600">
+          <li>
+            <strong>KDIGO AKI Work Group:</strong> KDIGO Clinical Practice Guideline for Acute Kidney Injury. <em>Kidney Inter., Suppl.</em> 2012; 2: 1–138. (Recommendation 5.7.1: We recommend delivering an effluent volume of 20–25 mL/kg/h for CRRT in AKI, requiring a prescribed dose of 25–30 mL/kg/h).
+          </li>
+          <li>
+            <strong>Ronco C, Bellomo R, Kellum JA:</strong> Critical Care Nephrology (3rd Edition). Elsevier, 2019. (Chapter on Convective clearance, Pre- vs Post-dilution mechanisms, and Filtration Fraction limits).
+          </li>
+          <li>
+            <strong>The VA/NIH Acute Renal Failure Trial Network (ATN Study):</strong> Intensity of renal support in critically ill patients with acute kidney injury. <em>N Engl J Med.</em> 2008; 359:7–20.
+          </li>
+          <li>
+            <strong>The RENAL Replacement Therapy Study Investigators:</strong> Intensity of continuous renal-replacement therapy in critically ill patients. <em>N Engl J Med.</em> 2009; 361:1627–1638.
+          </li>
+        </ol>
+
+        <div class="p-3 bg-slate-100 rounded-lg text-slate-500 text-[11px] mt-3">
+          <strong class="text-slate-700">臨床醫療免責聲明：</strong>
+          本計算工具僅供醫療專業人員參考輔助。實際處方劑量應由主治醫師考量病患整體體液狀態、酸鹼平衡、電解質、凝血狀態及血管通路 (Vascular Access) 耐受度後綜合判斷制定。
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 頁腳 -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-8 text-center text-xs text-slate-500 no-print">
+    <div class="max-w-7xl mx-auto px-4">
+      CRRT (CVVH) Clinical Prescription &amp; Filtration Fraction Calculator &bull; Designed for ICU &amp; Nephrology Medical Staff
+    </div>
+  </footer>
+
+  <!-- 計算邏輯 JavaScript -->
+  <script>
+    // 運作模式: 'target' (目標導向) 或 'direct' (自訂流速)
+    let calcMode = 'target';
+
+    // 取得 DOM 節點
+    const inputs = {
+      bw: document.getElementById('bw'),
+      qb: document.getElementById('qb'),
+      hct: document.getElementById('hct'),
+      netUf: document.getElementById('netUf'),
+      targetDose: document.getElementById('targetDose'),
+      preDilutionRatio: document.getElementById('preDilutionRatio'),
+      directPre: document.getElementById('directPre'),
+      directPost: document.getElementById('directPost'),
+      downtimeHours: document.getElementById('downtimeHours')
+    };
+
+    const displays = {
+      bwVal: document.getElementById('bwVal'),
+      qbVal: document.getElementById('qbVal'),
+      hctVal: document.getElementById('hctVal'),
+      netUfVal: document.getElementById('netUfVal'),
+      targetDoseLabel: document.getElementById('targetDoseLabel'),
+      preRatioVal: document.getElementById('preRatioVal'),
+      directPreVal: document.getElementById('directPreVal'),
+      directPostVal: document.getElementById('directPostVal'),
+      downtimeHoursVal: document.getElementById('downtimeHoursVal'),
+
+      // 結果欄位
+      resEffluentRate: document.getElementById('resEffluentRate'),
+      resPrescribedDose: document.getElementById('resPrescribedDose'),
+      resEffectiveDose: document.getElementById('resEffectiveDose'),
+      resQp: document.getElementById('resQp'),
+      resQpre: document.getElementById('resQpre'),
+      resQpost: document.getElementById('resQpost'),
+      resDF: document.getElementById('resDF'),
+      resDowntimeDose: document.getElementById('resDowntimeDose'),
+      doseBadge: document.getElementById('doseBadge'),
+
+      // FF 欄位
+      resFF: document.getElementById('resFF'),
+      ffStatusBadge: document.getElementById('ffStatusBadge'),
+      ffAdviceBox: document.getElementById('ffAdviceBox'),
+      ffAdviceTitle: document.getElementById('ffAdviceTitle'),
+      ffAdviceText: document.getElementById('ffAdviceText')
+    };
+
+    // 模式切換按鈕
+    const modeTargetBtn = document.getElementById('modeTargetBtn');
+    const modeDirectBtn = document.getElementById('modeDirectBtn');
+    const targetControls = document.getElementById('targetModeControls');
+    const directControls = document.getElementById('directModeControls');
+
+    function updateDoseButtons(currentDose) {
+      const presets = [20, 25, 30, 35];
+      presets.forEach(dose => {
+        const btn = document.getElementById(`btnPreset${dose}`);
+        if (!btn) return;
+        if (currentDose === dose) {
+          btn.className = "py-1 px-2 bg-teal-600 border border-teal-600 text-white rounded shadow-xs text-center font-bold transition-colors";
+        } else {
+          btn.className = "py-1 px-2 bg-white border border-teal-200 rounded text-teal-800 hover:bg-teal-100 text-center font-medium transition-colors";
+        }
+      });
+    }
+
+    function switchCalcMode(mode) {
+      calcMode = mode;
+      if (mode === 'target') {
+        modeTargetBtn.className = "px-2.5 py-1 rounded-md bg-white text-teal-800 shadow-sm transition font-semibold";
+        modeDirectBtn.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition";
+        targetControls.classList.remove('hidden');
+        directControls.classList.add('hidden');
+      } else {
+        modeDirectBtn.className = "px-2.5 py-1 rounded-md bg-white text-teal-800 shadow-sm transition font-semibold";
+        modeTargetBtn.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition";
+        directControls.classList.remove('hidden');
+        targetControls.classList.add('hidden');
+      }
+      calculate();
+    }
+
+    function setPresetDose(dose) {
+      inputs.targetDose.value = dose;
+      calculate();
+    }
+
+    function resetDefaults() {
+      inputs.bw.value = 65;
+      inputs.qb.value = 150;
+      inputs.hct.value = 30;
+      inputs.netUf.value = 100;
+      inputs.targetDose.value = 25;
+      inputs.preDilutionRatio.value = 50;
+      inputs.directPre.value = 800;
+      inputs.directPost.value = 800;
+      inputs.downtimeHours.value = 2.5;
+      switchCalcMode('target');
+      calculate();
+    }
+
+    // 綁定所有 input 事件
+    Object.values(inputs).forEach(input => {
+      input.addEventListener('input', calculate);
+    });
+
+    function calculate() {
+      // 讀取數值
+      const bw = parseFloat(inputs.bw.value);
+      const qb = parseFloat(inputs.qb.value); // mL/min
+      const hct = parseFloat(inputs.hct.value) / 100.0;
+      const netUf = parseFloat(inputs.netUf.value); // mL/h
+      const downtimeH = parseFloat(inputs.downtimeHours.value);
+
+      // 動態更新快捷按鈕的視覺樣式
+      updateDoseButtons(parseFloat(inputs.targetDose.value));
+
+      // 血漿流速 Qp (mL/h) = Qb * (1 - Hct) * 60
+      const qpMin = qb * (1 - hct);
+      const qpHour = qpMin * 60;
+
+      let qPre = 0;
+      let qPost = 0;
+      let totalEffluent = 0;
+      let prescribedDose = 0;
+
+      if (calcMode === 'target') {
+        // 模式一：推算補液模式 (Target-driven)
+        const baseRepDose = parseFloat(inputs.targetDose.value); // mL/kg/h
+        const preRatio = parseFloat(inputs.preDilutionRatio.value) / 100.0;
+
+        // 邏輯: 
+        // 基礎置換液總量 (Q_rep) = Base Replacement Dose * Weight
+        const qRep = baseRepDose * bw;
+
+        // 依比例分配前/後置換液
+        // Q_pre = Q_rep * Pre%
+        qPre = qRep * preRatio;
+        // Q_post = Q_rep * Post%
+        qPost = qRep * (1 - preRatio);
+
+        // 同步隱藏的直接輸入框，保持數值一致性
+        inputs.directPre.value = Math.round(qPre);
+        inputs.directPost.value = Math.round(qPost);
+
+        // 總廢液排量 Total Effluent Rate (Q_eff) = Q_pre + Q_post + Net UF
+        // 確保脫水量 (Net UF) 增加時，Effluent 會隨之增加
+        totalEffluent = qPre + qPost + netUf;
+
+        // 實際處方劑量 Actual Prescribed Dose = Q_eff / Weight
+        prescribedDose = totalEffluent / bw;
+      } else {
+        // 模式二：自訂流速算劑量 (Manual Mode)
+        qPre = parseFloat(inputs.directPre.value);
+        qPost = parseFloat(inputs.directPost.value);
+        
+        // 核心定義: Total Effluent = Q_pre + Q_post + Q_net_uf
+        totalEffluent = qPre + qPost + netUf;
+        
+        // 當改變 Net UF 時，Prescribed Dose 必須即時增加/減少
+        prescribedDose = totalEffluent / bw; 
+      }
+
+      // 稀釋因子 Dilution Factor (DF)
+      // DF = Qp / (Qp + Q_pre)
+      const df = (qpHour + qPre > 0) ? (qpHour / (qpHour + qPre)) : 1.0;
+
+      // 實際傳遞劑量 (Delivered dose, 校正前稀釋)
+      // Convective clearance = (Qpre * DF) + Qpost + Net UF
+      const effectiveSoluteClearance = (qPre * df) + qPost + netUf;
+      const effectiveDose = effectiveSoluteClearance / bw;
+
+      // 停機時間校正實際交付劑量 (Daily downtime factor)
+      // 運轉率 = (24 - downtimeH) / 24
+      const runtimeFactor = Math.max(0, (24 - downtimeH) / 24);
+      const downtimeDeliveredDose = effectiveDose * runtimeFactor;
+
+      // 過濾分數 Filtration Fraction (FF)
+      // 依據嚴格指定邏輯: FF = (Q_net_uf + Q_post) / Q_plasma
+      let ff = 0;
+      if (qpHour > 0) {
+        ff = ((netUf + qPost) / qpHour) * 100;
+      }
+
+      // 更新畫面數值
+      displays.bwVal.innerHTML = `${bw} <span class="text-xs font-normal text-slate-500">kg</span>`;
+      displays.qbVal.innerHTML = `${qb} <span class="text-xs font-normal text-slate-500">mL/min</span>`;
+      displays.hctVal.innerHTML = `${Math.round(hct * 100)} <span class="text-xs font-normal text-slate-500">%</span>`;
+      displays.netUfVal.innerHTML = `${Math.round(netUf)} <span class="text-xs font-normal text-slate-500">mL/h</span>`;
+      displays.targetDoseLabel.innerText = `${parseFloat(inputs.targetDose.value).toFixed(1)} mL/kg/h`;
+      displays.preRatioVal.innerText = `${inputs.preDilutionRatio.value}%`;
+      displays.directPreVal.innerText = `${Math.round(inputs.directPre.value)} mL/h`;
+      displays.directPostVal.innerText = `${Math.round(inputs.directPost.value)} mL/h`;
+
+      const downtimePercent = ((downtimeH / 24) * 100).toFixed(1);
+      displays.downtimeHoursVal.innerText = `${downtimeH} 小時/天 (損耗約 ${downtimePercent}%)`;
+
+      // 主輸出
+      displays.resEffluentRate.innerHTML = `${Math.round(totalEffluent)} <span class="text-xs font-normal text-slate-500">mL/h</span>`;
+      displays.resPrescribedDose.innerHTML = `${prescribedDose.toFixed(1)} <span class="text-xs font-normal text-teal-700">mL/kg/h</span>`;
+      displays.resEffectiveDose.innerHTML = `${effectiveDose.toFixed(1)} <span class="text-xs font-normal text-emerald-700">mL/kg/h</span>`;
+
+      displays.resQp.innerText = `${Math.round(qpHour)} mL/h (${Math.round(qpMin)} mL/min)`;
+      displays.resQpre.innerText = `${Math.round(qPre)} mL/h (${((qPre / (qPre + qPost || 1)) * 100).toFixed(0)}%)`;
+      displays.resQpost.innerText = `${Math.round(qPost)} mL/h (${((qPost / (qPre + qPost || 1)) * 100).toFixed(0)}%)`;
+      displays.resDF.innerText = `${df.toFixed(3)} (${(df * 100).toFixed(1)}% 溶質濃度維持率)`;
+      displays.resDowntimeDose.innerText = `${downtimeDeliveredDose.toFixed(1)} mL/kg/h (${(runtimeFactor * 100).toFixed(0)}% 時間運轉)`;
+
+      // KDIGO 處方劑量狀態標籤更新
+      if (prescribedDose >= 25 && prescribedDose <= 30) {
+        displays.doseBadge.className = "text-xs px-2.5 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300";
+        displays.doseBadge.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i>處方劑量符合 KDIGO 標準 (25–30 mL/kg/h)';
+      } else if (prescribedDose < 20) {
+        displays.doseBadge.className = "text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-100 text-amber-800 border border-amber-300";
+        displays.doseBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i>劑量偏低 (&lt; 20 mL/kg/h)，可能清除不足';
+      } else if (prescribedDose > 35) {
+        displays.doseBadge.className = "text-xs px-2.5 py-1 rounded-full font-semibold bg-blue-100 text-blue-800 border border-blue-300";
+        displays.doseBadge.innerHTML = '<i class="fa-solid fa-circle-info mr-1"></i>高劑量 (&gt; 35 mL/kg/h)，文獻未證實額外獲益';
+      } else {
+        displays.doseBadge.className = "text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-100 text-slate-800 border border-slate-300";
+        displays.doseBadge.innerHTML = '常規觀察範圍 (20–25 或 30–35 mL/kg/h)';
+      }
+
+      // 過濾分數 (FF) 更新
+      displays.resFF.innerHTML = `${ff.toFixed(1)} <span class="text-sm font-normal text-slate-500">%</span>`;
+
+      if (ff < 20.0) {
+        // 安全範圍
+        displays.ffStatusBadge.className = "text-xs px-3 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300";
+        displays.ffStatusBadge.innerHTML = '<i class="fa-solid fa-check mr-1"></i>安全正常 (< 20%)';
+        
+        displays.ffAdviceBox.className = "p-3.5 rounded-xl text-xs transition border flex items-start gap-3 bg-emerald-50 border-emerald-200 text-emerald-900";
+        displays.ffAdviceTitle.innerText = "濾器血液濃縮狀況良好 (低凝血風險)";
+        displays.ffAdviceText.innerText = `目前過濾分數為 ${ff.toFixed(1)}%，低於 20% 安全上限。濾器內血液黏稠度在理想範圍內，有助於維持膜管通透性並延長濾器壽命。`;
+      } else if (ff >= 20.0 && ff <= 25.0) {
+        // 邊緣警戒
+        displays.ffStatusBadge.className = "text-xs px-3 py-1 rounded-full font-bold bg-amber-100 text-amber-900 border border-amber-300";
+        displays.ffStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i>邊緣警戒 (20% – 25%)';
+        
+        displays.ffAdviceBox.className = "p-3.5 rounded-xl text-xs transition border flex items-start gap-3 bg-amber-50 border-amber-200 text-amber-900";
+        displays.ffAdviceTitle.innerText = "過濾分數處於邊緣警戒範圍";
+        displays.ffAdviceText.innerText = `當前過濾分數為 ${ff.toFixed(1)}% (介於 20%~25%)。請密切監測跨膜壓 (TMP) 與濾器壓力降。若病患有較高凝血傾向或未全身抗凝，可考慮適度調高血流速 Qb 或調增前稀釋比例。`;
+      } else {
+        // 高度風險 (> 25%)
+        displays.ffStatusBadge.className = "text-xs px-3 py-1 rounded-full font-bold bg-rose-100 text-rose-900 border border-rose-300";
+        displays.ffStatusBadge.innerHTML = '<i class="fa-solid fa-circle-exclamation mr-1"></i>高凝血風險 (> 25%)';
+        
+        displays.ffAdviceBox.className = "p-3.5 rounded-xl text-xs transition border flex items-start gap-3 bg-rose-50 border-rose-200 text-rose-900";
+        displays.ffAdviceTitle.innerText = "警示：過濾分數過高，濾器凝血風險極高！";
+        displays.ffAdviceText.innerText = `目前過濾分數達 ${ff.toFixed(1)}% (> 25%)。濾器內發生嚴重血液濃縮與蛋白質沉積 (Protein cake layer)。建議處置：1) 增加血流量 Qb (增加血漿通量)；2) 提高前稀釋 (Pre-dilution) 比例降低血液黏稠度；或 3) 重新評估每小時淨脫水量 (Net UF)。`;
+      }
+    }
+
+    // 初次載入即時計算
+    window.addEventListener('DOMContentLoaded', () => {
+      calculate();
+    });
+  </script>
+</body>
+</html>
